@@ -6,7 +6,21 @@
 #include <iostream>
 #include <math.h>
 
+#include <sys/ioctl.h>
+#include <linux/serial.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <termios.h>
 
+#define BAUD B115200
 TeensyDevice::Transfer::Transfer(TeensyDevice *device, Packet &packet)
     : transfer(libusb_alloc_transfer(0)),finished(false)
 {
@@ -21,7 +35,7 @@ TeensyDevice::Transfer::~Transfer()
 }
 
 TeensyDevice::TeensyDevice(libusb_device *device, bool verbose)
-    : USBDevice(device, "teensy", verbose)
+    : USBDevice(device, "teensy", verbose), dev(0)
 {
 
     mSerialBuffer[0] = '\0';
@@ -62,6 +76,30 @@ bool TeensyDevice::probe(libusb_device *device)
     return dd.idVendor == 0x016c0 && dd.idProduct == 0x0486 || dd.idVendor == 0x016c0 && dd.idProduct == 0x0483;
 }
 
+void die(const char * msg) {
+    fprintf(stderr, "%s\n", msg);
+    exit(1);
+}
+int derp(char* name) {
+    struct termios tinfo;
+    struct serial_struct kernel_serial_settings;
+
+    fprintf(stderr, "opening: %s\n", name);
+    int dev = open(name, O_RDWR| O_NOCTTY);
+    if (dev < 0) die("unable to open port");
+    if (tcgetattr(dev, &tinfo) < 0) die("unable to get serial parms\n");
+    cfmakeraw(&tinfo);
+    if (cfsetspeed(&tinfo, BAUD) < 0) die("error in cfsetspeed\n");
+    if (tcsetattr(dev, TCSANOW, &tinfo) < 0) die("unable to set baud rate\n");
+    int r = ioctl(dev, TIOCGSERIAL, &kernel_serial_settings);
+    if (r >= 0) {
+        kernel_serial_settings.flags |= ASYNC_LOW_LATENCY;
+        r = ioctl(dev, TIOCSSERIAL, &kernel_serial_settings);
+        if (r >= 0) printf("set linux low latency mode\n");
+    }
+    return dev;
+}
+
 int TeensyDevice::open()
 {
     libusb_device_descriptor dd;
@@ -76,20 +114,16 @@ int TeensyDevice::open()
     }
 
 
-    // Only relevant on linux; try to detach the FTDI driver.
-    libusb_detach_kernel_driver(mHandle, 0);
-
-    r = libusb_claim_interface(mHandle, 0);
-    if (r < 0) {
-        return r;
-    }
-
     r = libusb_get_string_descriptor_ascii(mHandle, dd.iSerialNumber,
         (uint8_t*)mSerialBuffer, sizeof mSerialBuffer);
     if (r < 0) {
         return r;
     }
 
+    char name[256];
+    sleep(1);
+    sprintf(name, "/dev/serial/by-id/usb-Teensyduino_USB_Serial_%s-if00", mSerialBuffer);
+    dev = derp(name);
     return 0;
 }
 
@@ -127,7 +161,20 @@ bool TeensyDevice::submitTransfer(Packet &packet)
     //transfered = libusb_control_transfer(mHandle, 0x21, 9, 0x0200, 0,
     //                          (unsigned char *)&packet, sizeof(packet), 10000);
 
-    fprintf(stderr, "sending\n");
+    char buffer[256];
+    int bytes_available;
+    ioctl(dev, FIONREAD, &bytes_available);
+    if(bytes_available) {
+        memset(buffer, sizeof(buffer), '\0');
+        read(dev, &buffer, bytes_available);
+        fprintf(stderr, "%s", buffer);
+    }
+    //fprintf(stderr, "sending\n");
+
+    transfered = write(dev, &packet, sizeof(packet));
+    //fprintf(stderr, "transfered: %d\n", transfered);
+
+    return true;
     int ret = libusb_bulk_transfer(mHandle, 0x02, (unsigned char*)&packet, sizeof(packet), &transfered, 0);
     fprintf(stderr, "transfered: %d\n", transfered);
     if (ret < 0) {

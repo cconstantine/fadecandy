@@ -30,6 +30,7 @@ private:
     char mSerialBuffer[256];
     unsigned char lut[3][255];
     const Value *mConfigMap;
+    int dev;
 
     const unsigned int show = 1;
     struct Packet {
