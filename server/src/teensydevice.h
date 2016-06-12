@@ -19,8 +19,16 @@ public:
     virtual std::string getName();
     virtual void flush();
 
+    
+    // Write color LUT from parsed JSON
+    virtual void writeColorCorrection(const Value &color);
+
+
+    static LIBUSB_CALL void completeTransfer(libusb_transfer *transfer);
+
 private:
     char mSerialBuffer[256];
+    unsigned char lut[3][255];
     const Value *mConfigMap;
 
     const unsigned int show = 1;
@@ -31,6 +39,17 @@ private:
         uint8_t flags;
         uint8_t data[60];
     };
+
+    struct Transfer {
+        Transfer(TeensyDevice *device, Packet &packet);
+        ~Transfer();
+        libusb_transfer *transfer;
+        Packet bufferCopy;
+        bool finished;
+    };
+
+    std::set<Transfer*> mPending;
+    bool submitTransfer(Packet &packet);
 
     void opcSetPixelColors(const OPC::Message &msg);
     void opcMapPixelColors(const OPC::Message &msg, const Value &inst);
