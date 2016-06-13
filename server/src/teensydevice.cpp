@@ -319,9 +319,9 @@ void TeensyDevice::opcMapPixelColors(const OPC::Message &msg, const Value &inst)
                     p.data[j*3+1] = lut[1][inPtr[j*3+1]];
                     p.data[j*3+2] = lut[2][inPtr[j*3+2]];
 
-                    p.data[j*3+0] = inPtr[j*3+0]*0.1;
-                    p.data[j*3+1] = inPtr[j*3+1]*0.1;
-                    p.data[j*3+2] = inPtr[j*3+2]*0.1;
+                    p.data[j*3+0] = inPtr[j*3+0]*0.25;
+                    p.data[j*3+1] = inPtr[j*3+1]*0.25;
+                    p.data[j*3+2] = inPtr[j*3+2]*0.25;
                 }
 //                memcpy(p.data, inPtr, p.size*3);
                 //int ret = libusb_bulk_transfer(mHandle, 4, (unsigned char*)&p, sizeof(p), &transfered, 0);
